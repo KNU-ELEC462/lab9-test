@@ -93,8 +93,10 @@ printf "C (multi-threaded):        %s req/sec\n" "$req_mt"
 
 if [[ "$is_faster" -eq 1 ]]; then
   echo "PASS: Multi-threaded C server outperforms the single-threaded Python baseline."
+  echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
 else
-  echo "FAIL: Multi-threaded C server did not outperform the single-threaded Python baseline."
+  echo "FAIL: Multi-threaded C server is not at least 30% faster than the Python baseline."
+  echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
   exit 1
 fi
 
