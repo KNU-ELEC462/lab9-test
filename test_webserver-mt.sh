@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Benchmark configuration
+# === Configuration ===
 PORT=8080
 DURATION=5
 CONNECTIONS=64
 THREADS=4
+REPEAT=3  # Set the number of repetitions
 
 SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
@@ -42,43 +43,36 @@ if ! gcc webserver-mt.c -o webserver_mt -lpthread -O3 -Wno-unused-result; then
 fi
 
 # Functional test
-run_functional_test() {
-  echo "[TEST] Functional test for $1"
-  "$1" > /dev/null 2>&1 &
-  pid=$!
-  sleep 1
-  http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
-  if ps -p "$pid" > /dev/null; then kill "$pid"; fi
-  sleep 1
+echo "[TEST] Functional test for ./webserver_mt"
+./webserver_mt > /dev/null 2>&1 &
+pid=$!
+sleep 1
+http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
+if ps -p "$pid" > /dev/null; then kill "$pid"; fi
+sleep 1
 
-  if [[ "$http_code" == "200" ]]; then
-    echo "PASS: $1 served index.html successfully."
-  else
-    echo "FAIL: $1 failed to serve index.html (HTTP $http_code)"
-    exit 1
-  fi
-  echo ""
-}
+if [[ "$http_code" == "200" ]]; then
+  echo "PASS: ./webserver_mt served index.html successfully."
+else
+  echo "FAIL: ./webserver_mt failed to serve index.html (HTTP $http_code)"
+  exit 1
+fi
+echo ""
 
-run_functional_test "./webserver_mt"
-
-# === Python baseline benchmark (5 runs) ===
+# === Python baseline benchmark ===
 echo "[INFO] Benchmarking Python (single-threaded)..."
 total_py=0
 
-for i in {1..5}; do
+for i in $(seq 1 $REPEAT); do
   echo "[INFO] Python run $i..."
 
   taskset -c 0 python3 baseline.py > /dev/null 2>&1 &
   pid=$!
 
-  # Wait until server responds with 200 OK
   for j in {1..10}; do
     sleep 0.5
     http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
-    if [[ "$http_code" == "200" ]]; then
-      break
-    fi
+    if [[ "$http_code" == "200" ]]; then break; fi
   done
 
   if ! ps -p "$pid" > /dev/null; then
@@ -95,13 +89,13 @@ for i in {1..5}; do
   sleep 1
 done
 
-avg_py=$(echo "scale=2; $total_py / 5" | bc)
+avg_py=$(echo "scale=2; $total_py / $REPEAT" | bc)
 
-# === C multi-threaded benchmark (5 runs) ===
+# === C multi-threaded benchmark ===
 echo "[INFO] Benchmarking C (multi-threaded)..."
 total_mt=0
 
-for i in {1..5}; do
+for i in $(seq 1 $REPEAT); do
   echo "[INFO] C run $i..."
 
   ./webserver_mt > /dev/null 2>&1 &
@@ -110,9 +104,7 @@ for i in {1..5}; do
   for j in {1..10}; do
     sleep 0.5
     http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
-    if [[ "$http_code" == "200" ]]; then
-      break
-    fi
+    if [[ "$http_code" == "200" ]]; then break; fi
   done
 
   if ! ps -p "$pid" > /dev/null; then
@@ -129,12 +121,12 @@ for i in {1..5}; do
   sleep 1
 done
 
-avg_mt=$(echo "scale=2; $total_mt / 5" | bc)
+avg_mt=$(echo "scale=2; $total_mt / $REPEAT" | bc)
 
 # === Result and threshold check ===
 threshold=$(echo "$avg_py * 1.3" | bc)
 echo ""
-echo "=== PERFORMANCE RESULTS (average over 5 runs) ==="
+echo "=== PERFORMANCE RESULTS (average over $REPEAT runs) ==="
 printf "Python (single-threaded):  %s req/sec\n" "$avg_py"
 printf "C (multi-threaded):        %s req/sec\n" "$avg_mt"
 
