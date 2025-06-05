@@ -83,7 +83,7 @@ sleep 1
 # Parse results
 req_py=$(grep "Requests/sec" py_wrk.log | awk '{print $2}')
 req_mt=$(grep "Requests/sec" mt_wrk.log | awk '{print $2}')
-threshold=$(echo "$req_py * 1.0" | bc)
+threshold=$(echo "$req_py * 1.3" | bc)
 is_faster=$(echo "$req_mt >= $threshold" | bc)
 
 echo ""
