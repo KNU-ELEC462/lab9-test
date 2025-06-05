@@ -5,6 +5,7 @@ PORT=8080
 DURATION=5
 CONNECTIONS=64
 THREADS=4
+REPEAT=5
 
 SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
@@ -62,40 +63,48 @@ run_functional_test() {
 
 run_functional_test "./webserver_mt"
 
-# Benchmark Python baseline
-echo "[INFO] Benchmarking Python baseline server..."
-python3 baseline.py > /dev/null 2>&1 &
-pid_py=$!
-sleep 1
-wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > py_wrk.log
-if ps -p "$pid_py" > /dev/null; then kill "$pid_py"; fi
-sleep 1
+# Benchmark multiple times and average
+avg_requests() {
+  local cmd=$1
+  local name=$2
+  local total=0
 
-# Benchmark C multi-threaded server
-echo "[INFO] Benchmarking multi-threaded C server..."
-./webserver_mt > /dev/null 2>&1 &
-pid_mt=$!
-sleep 1
-wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > mt_wrk.log
-if ps -p "$pid_mt" > /dev/null; then kill "$pid_mt"; fi
-sleep 1
+  echo "[INFO] Benchmarking $name..."
 
-# Parse results
-req_py=$(grep "Requests/sec" py_wrk.log | awk '{print $2}')
-req_mt=$(grep "Requests/sec" mt_wrk.log | awk '{print $2}')
+  for i in $(seq 1 $REPEAT); do
+    $cmd > /dev/null 2>&1 &
+    pid=$!
+    sleep 1
+    wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > wrk_tmp.log
+    if ps -p "$pid" > /dev/null; then kill "$pid"; fi
+    sleep 1
+    req=$(grep "Requests/sec" wrk_tmp.log | awk '{print $2}')
+    echo "Run #$i: $req req/sec"
+    total=$(echo "$total + $req" | bc)
+  done
+
+  avg=$(echo "scale=2; $total / $REPEAT" | bc)
+  echo "[INFO] Average for $name: $avg req/sec"
+  echo "$avg"
+}
+
+req_py=$(avg_requests "taskset -c 0 python3 baseline.py" "Python (single-threaded)")
+req_mt=$(avg_requests "./webserver_mt" "C (multi-threaded)")
+
 threshold=$(echo "$req_py * 1.3" | bc)
 is_faster=$(echo "$req_mt >= $threshold" | bc)
 
 echo ""
-echo "=== PERFORMANCE RESULTS ==="
+echo "=== PERFORMANCE RESULTS (AVERAGED OVER $REPEAT RUNS) ==="
 printf "Python (single-threaded):  %s req/sec\n" "$req_py"
 printf "C (multi-threaded):        %s req/sec\n" "$req_mt"
+printf "Expected threshold:        %s req/sec\n" "$threshold"
 
 if [[ "$is_faster" -eq 1 ]]; then
-  echo "PASS: Multi-threaded C server outperforms the single-threaded Python baseline."
+  echo "PASS: The multi-threaded C server outperforms the single-threaded Python baseline."
   echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
 else
-  echo "FAIL: Multi-threaded C server is not at least 30% faster than the Python baseline."
+  echo "FAIL: The multi-threaded C server is not at least 30% faster than the Python baseline."
   echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
   exit 1
 fi
