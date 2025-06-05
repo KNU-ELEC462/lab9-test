@@ -26,7 +26,7 @@ trap cleanup EXIT
 cp "$SRC" "$TMP_DIR/"
 
 # 2. Build in temp dir
-echo "[INFO] Building $SRC in $TMP_DIR..."
+echo "[INFO] Building $TARGET..."
 mkdir -p "$OUTPUT_DIR"
 if ! gcc -o "$BIN" "$SRC"; then
   echo "FAIL: Build failed"
