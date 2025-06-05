@@ -5,7 +5,6 @@ PORT=8080
 DURATION=5
 CONNECTIONS=64
 THREADS=4
-REPEAT=5
 
 SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
@@ -63,48 +62,88 @@ run_functional_test() {
 
 run_functional_test "./webserver_mt"
 
-# Benchmark multiple times and average
-avg_requests() {
-  local cmd=$1
-  local name=$2
-  local total=0
+# === Python baseline benchmark (5 runs) ===
+echo "[INFO] Benchmarking Python (single-threaded)..."
+total_py=0
 
-  echo "[INFO] Benchmarking $name..."
+for i in {1..5}; do
+  echo "[INFO] Python run $i..."
 
-  for i in $(seq 1 $REPEAT); do
-    $cmd > /dev/null 2>&1 &
-    pid=$!
-    sleep 1
-    wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > wrk_tmp.log
-    if ps -p "$pid" > /dev/null; then kill "$pid"; fi
-    sleep 1
-    req=$(grep "Requests/sec" wrk_tmp.log | awk '{print $2}')
-    echo "Run #$i: $req req/sec"
-    total=$(echo "$total + $req" | bc)
+  taskset -c 0 python3 baseline.py > /dev/null 2>&1 &
+  pid=$!
+
+  # Wait until server responds with 200 OK
+  for j in {1..10}; do
+    sleep 0.5
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
+    if [[ "$http_code" == "200" ]]; then
+      break
+    fi
   done
 
-  avg=$(echo "scale=2; $total / $REPEAT" | bc)
-  echo "[INFO] Average for $name: $avg req/sec"
-  echo "$avg"
-}
+  if ! ps -p "$pid" > /dev/null; then
+    echo "FAIL: Python server did not start properly"
+    exit 1
+  fi
 
-req_py=$(avg_requests "taskset -c 0 python3 baseline.py" "Python (single-threaded)")
-req_mt=$(avg_requests "./webserver_mt" "C (multi-threaded)")
+  wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > py_wrk.log
+  req=$(grep "Requests/sec" py_wrk.log | awk '{print $2}')
+  echo " - $req req/sec"
+  total_py=$(echo "$total_py + $req" | bc)
 
-threshold=$(echo "$req_py * 1.3" | bc)
-is_faster=$(echo "$req_mt >= $threshold" | bc)
+  kill "$pid" 2>/dev/null
+  sleep 1
+done
 
+avg_py=$(echo "scale=2; $total_py / 5" | bc)
+
+# === C multi-threaded benchmark (5 runs) ===
+echo "[INFO] Benchmarking C (multi-threaded)..."
+total_mt=0
+
+for i in {1..5}; do
+  echo "[INFO] C run $i..."
+
+  ./webserver_mt > /dev/null 2>&1 &
+  pid=$!
+
+  for j in {1..10}; do
+    sleep 0.5
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/index.html)
+    if [[ "$http_code" == "200" ]]; then
+      break
+    fi
+  done
+
+  if ! ps -p "$pid" > /dev/null; then
+    echo "FAIL: C server did not start properly"
+    exit 1
+  fi
+
+  wrk -t"$THREADS" -c"$CONNECTIONS" -d"${DURATION}s" http://localhost:$PORT/index.html > mt_wrk.log
+  req=$(grep "Requests/sec" mt_wrk.log | awk '{print $2}')
+  echo " - $req req/sec"
+  total_mt=$(echo "$total_mt + $req" | bc)
+
+  kill "$pid" 2>/dev/null
+  sleep 1
+done
+
+avg_mt=$(echo "scale=2; $total_mt / 5" | bc)
+
+# === Result and threshold check ===
+threshold=$(echo "$avg_py * 1.3" | bc)
 echo ""
-echo "=== PERFORMANCE RESULTS (AVERAGED OVER $REPEAT RUNS) ==="
-printf "Python (single-threaded):  %s req/sec\n" "$req_py"
-printf "C (multi-threaded):        %s req/sec\n" "$req_mt"
-printf "Expected threshold:        %s req/sec\n" "$threshold"
+echo "=== PERFORMANCE RESULTS (average over 5 runs) ==="
+printf "Python (single-threaded):  %s req/sec\n" "$avg_py"
+printf "C (multi-threaded):        %s req/sec\n" "$avg_mt"
 
+is_faster=$(echo "$avg_mt >= $threshold" | bc)
 if [[ "$is_faster" -eq 1 ]]; then
-  echo "PASS: The multi-threaded C server outperforms the single-threaded Python baseline."
+  echo "PASS: Multi-threaded C server outperforms the single-threaded Python baseline."
   echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
 else
-  echo "FAIL: The multi-threaded C server is not at least 30% faster than the Python baseline."
+  echo "FAIL: Multi-threaded C server is not at least 30% faster than the Python baseline."
   echo "HINT: Results may vary depending on the system. Please also verify using GitHub Actions."
   exit 1
 fi
