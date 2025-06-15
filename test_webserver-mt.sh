@@ -9,7 +9,7 @@ REPEAT=3  # Set the number of repetitions
 
 SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
-TMP_DIR=$(mktemp -d)
+TMP_DIR="$(mktemp -d).webserver-mt"
 cd "$TMP_DIR" || exit 1
 sleep 1
 
