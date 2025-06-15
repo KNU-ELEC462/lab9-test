@@ -8,6 +8,7 @@ TIMEOUT=5
 # Create isolated temporary directory
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR" || exit 1
+sleep 1
 
 WWW_DIR="./www"
 OUTPUT_DIR="./outputs"

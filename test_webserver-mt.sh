@@ -11,6 +11,7 @@ SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR" || exit 1
+sleep 1
 
 # Check CPU core count
 NUM_CORES=$(getconf _NPROCESSORS_ONLN)
