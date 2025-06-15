@@ -20,6 +20,9 @@ if [[ "$NUM_CORES" -lt 2 ]]; then
   exit 1
 fi
 
+pkill -f "webserver_mt" 2>/dev/null
+pkill -f "baseline.py" 2>/dev/null
+
 # Cleanup on exit
 cleanup() {
   pkill -f "webserver_mt" 2>/dev/null

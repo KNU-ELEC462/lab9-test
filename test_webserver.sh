@@ -15,6 +15,8 @@ OUTPUT_DIR="./outputs"
 BIN="./$TARGET"
 SERVER_LOG="$OUTPUT_DIR/server.log"
 
+pkill -f "$TARGET" 2>/dev/null
+
 # Cleanup on exit
 cleanup() {
   pkill -f "$BIN" 2>/dev/null
