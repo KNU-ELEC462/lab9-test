@@ -10,9 +10,6 @@ REPEAT=3  # Set the number of repetitions
 SRC_MT="${PWD}/webserver-mt.c"
 PY_SERVER="${PWD}/baseline.py"
 TMP_DIR="$(mktemp -d)"
-rmdir $TMP_DIR
-TMP_DIR="$TMP_DIR.webserver-mt"
-mkdir -p $TMP_DIR
 cd "$TMP_DIR" || exit 1
 sleep 1
 
@@ -38,6 +35,7 @@ cp "$PY_SERVER" ./baseline.py
 mkdir -p www
 echo "[INFO] Generating large index.html..."
 python3 -c "with open('www/index.html', 'w') as f: f.write('<html><body><h1>Benchmark</h1>' + '<p>line</p>' * 10000 + '</body></html>')"
+sleep 1
 
 # Build C multi-threaded server
 echo "[INFO] Compiling webserver-mt.c..."
