@@ -25,7 +25,7 @@ cleanup() {
   pkill -f "webserver_mt" 2>/dev/null
   pkill -f "baseline.py" 2>/dev/null
   cd /
-  rm -rf "$TMP_DIR"
+  # rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
 
