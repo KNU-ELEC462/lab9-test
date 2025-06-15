@@ -6,7 +6,10 @@ PORT=8080
 TIMEOUT=5
 
 # Create isolated temporary directory
-TMP_DIR="$(mktemp -d).webserver"
+TMP_DIR="$(mktemp -d)"
+rmdir $TMP_DIR
+TMP_DIR="$TMP_DIR.webserver"
+mkdir -p $TMP_DIR
 cd "$TMP_DIR" || exit 1
 sleep 1
 
